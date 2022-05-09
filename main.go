@@ -1,77 +1,67 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"github.com/andreykaipov/goobs"
-	"github.com/andreykaipov/goobs/api/events"
+	servicebus "github.com/Azure/azure-service-bus-go"
+	"github.com/PrakharSrivastav/twitch-obs-hackathon/azure"
+	"github.com/PrakharSrivastav/twitch-obs-hackathon/obs"
 	"github.com/andreykaipov/goobs/api/requests/scenes"
 	"log"
-	"os"
 )
 
 func main() {
-	client, err := goobs.New(
-		os.Getenv("WSL_HOST")+":4444",
-		goobs.WithPassword("hello"),                   // optional
-		goobs.WithDebug(os.Getenv("OBS_DEBUG") != ""), // optional
-	)
+
+	// get the service bus sbClient
+	sbClient, err := azure.NewClient()
 	if err != nil {
-		panic(err)
+		log.Fatalln("azure connection error : ", err)
+	}
+	defer closeConnections(err, sbClient)()
+
+	obsClient, err := obs.NewClient()
+	if err != nil {
+		log.Fatalln("OBS obsClient error : ", err)
 	}
 
-	go func() {
-		for event := range client.IncomingEvents {
-			switch e := event.(type) {
-			case *events.SourceVolumeChanged:
-				fmt.Printf("Volume changed for %-25q: %f\n", e.SourceName, e.Volume)
-			default:
-				log.Printf("Unhandled event: %#v", e.GetUpdateType())
-			}
-		}
-	}()
+	mp := MessagePrinter{cc: obsClient}
 
-	list, err := client.Scenes.GetSceneList()
-	if err != nil {
-		log.Fatal("XXXX", err)
-	}
-
-	log.Printf("%v", list)
-
-	scene, err := client.Scenes.SetCurrentScene(&scenes.SetCurrentSceneParams{SceneName: "test"})
-	if err != nil {
-		log.Fatal("YYYY", err)
-	}
-	log.Printf("%v", scene)
+	// some logic here
 
 	for {
-	}
-
-	/*fmt.Println("Setting random volumes for each source...")
-
-	rand.Seed(time.Now().UnixNano())
-	list, _ := client.Sources.GetSourcesList()
-
-	for _, v := range list.Sources {
-		if _, err := client.Sources.SetVolume(&sources.SetVolumeParams{
-			Source: v.Name,
-			Volume: rand.Float64(),
-		}); err != nil {
-			panic(err)
+		err = sbClient.Queue.ReceiveOne(context.Background(), mp)
+		if err != nil {
+			log.Fatalln("receive error : ", err)
 		}
 	}
 
-	if len(list.Sources) == 0 {
-		fmt.Println("No sources!")
-		os.Exit(0)
+	log.Println("All Good")
+
+}
+
+func closeConnections(err error, client *azure.SBClient) func() {
+	return func() {
+		err = client.Close()
+		if err != nil {
+			log.Println(err)
+		}
+		log.Println("connection closed")
+	}
+}
+
+type MessagePrinter struct {
+	cc *obs.OBSClient
+}
+
+func (mp MessagePrinter) Handle(ctx context.Context, msg *servicebus.Message) error {
+	fmt.Println(string(msg.Data))
+	
+	scene := string(msg.Data)
+
+	_, err := mp.cc.Client.Scenes.SetCurrentScene(&scenes.SetCurrentSceneParams{SceneName: scene})
+	if err != nil {
+		log.Println("scene change error :", err)
 	}
 
-	fmt.Println("Test toggling the mute status of the first source...")
-
-	name := list.Sources[0].Name
-	resp, _ := client.Sources.GetVolume(&sources.GetVolumeParams{Source: name})
-	fmt.Printf("%s is muted? %t\n", name, resp.Muted)
-
-	_, _ = client.Sources.ToggleMute(&sources.ToggleMuteParams{Source: name})
-	resp, _ = client.Sources.GetVolume(&sources.GetVolumeParams{Source: name})
-	fmt.Printf("%s is muted? %t\n", name, resp.Muted)*/
+	return msg.Complete(ctx)
 }
