@@ -1,66 +1,77 @@
 package main
 
 import (
+	"fmt"
+	"github.com/andreykaipov/goobs"
+	"github.com/andreykaipov/goobs/api/events"
+	"github.com/andreykaipov/goobs/api/requests/scenes"
 	"log"
-	"time"
-
-	"github.com/christopher-dG/go-obs-websocket"
+	"os"
 )
 
 func main() {
-	// Connect a client.
-	c := obsws.Client{Host: "localhost", Port: 4444}
-	if err := c.Connect(); err != nil {
-		log.Fatal(err)
-	}
-	defer c.Disconnect()
-	log.Println("1")
-
-	// Send and receive a request asynchronously.
-	req := obsws.NewGetStreamingStatusRequest()
-	if err := req.Send(c); err != nil {
-		log.Println("i am here")
-		log.Fatal(err)
-	}
-	log.Println("2")
-
-	// This will block until the response comes (potentially forever).
-	resp, err := req.Receive()
+	client, err := goobs.New(
+		os.Getenv("WSL_HOST")+":4444",
+		goobs.WithPassword("hello"),                   // optional
+		goobs.WithDebug(os.Getenv("OBS_DEBUG") != ""), // optional
+	)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	log.Println("3")
 
-	log.Println("streaming:", resp.Streaming)
+	go func() {
+		for event := range client.IncomingEvents {
+			switch e := event.(type) {
+			case *events.SourceVolumeChanged:
+				fmt.Printf("Volume changed for %-25q: %f\n", e.SourceName, e.Volume)
+			default:
+				log.Printf("Unhandled event: %#v", e.GetUpdateType())
+			}
+		}
+	}()
 
-	// Set the amount of time we can wait for a response.
-	obsws.SetReceiveTimeout(time.Second * 2)
-
-	// Send and receive a request synchronously.
-	req = obsws.NewGetStreamingStatusRequest()
-	// Note that we create a new request,
-	// because requests have IDs that must be unique.
-	// This will block for up to two seconds, since we set a timeout.
-	resp, err = req.SendReceive(c)
+	list, err := client.Scenes.GetSceneList()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("XXXX", err)
 	}
-	log.Println("streaming:", resp.Streaming)
 
-	// Respond to events by registering handlers.
-	err = c.AddEventHandler("SwitchScenes", func(e obsws.Event) {
-		// Make sure to assert the actual event type.
-		log.Println("new scene:", e.(obsws.SwitchScenesEvent).SceneName)
-	})
+	log.Printf("%v", list)
 
+	scene, err := client.Scenes.SetCurrentScene(&scenes.SetCurrentSceneParams{SceneName: "test"})
 	if err != nil {
-		log.Println(err)
-		return
+		log.Fatal("YYYY", err)
 	}
-
-
-	c.
+	log.Printf("%v", scene)
 
 	for {
 	}
+
+	/*fmt.Println("Setting random volumes for each source...")
+
+	rand.Seed(time.Now().UnixNano())
+	list, _ := client.Sources.GetSourcesList()
+
+	for _, v := range list.Sources {
+		if _, err := client.Sources.SetVolume(&sources.SetVolumeParams{
+			Source: v.Name,
+			Volume: rand.Float64(),
+		}); err != nil {
+			panic(err)
+		}
+	}
+
+	if len(list.Sources) == 0 {
+		fmt.Println("No sources!")
+		os.Exit(0)
+	}
+
+	fmt.Println("Test toggling the mute status of the first source...")
+
+	name := list.Sources[0].Name
+	resp, _ := client.Sources.GetVolume(&sources.GetVolumeParams{Source: name})
+	fmt.Printf("%s is muted? %t\n", name, resp.Muted)
+
+	_, _ = client.Sources.ToggleMute(&sources.ToggleMuteParams{Source: name})
+	resp, _ = client.Sources.GetVolume(&sources.GetVolumeParams{Source: name})
+	fmt.Printf("%s is muted? %t\n", name, resp.Muted)*/
 }
