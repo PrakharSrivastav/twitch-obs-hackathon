@@ -10,7 +10,8 @@ import (
 // create a client
 
 type SBClient struct {
-	Queue *servicebus.Queue
+	Queue     *servicebus.Queue
+	SendQueue *servicebus.Queue
 }
 
 func NewClient() (*SBClient, error) {
@@ -23,19 +24,31 @@ func NewClient() (*SBClient, error) {
 	}
 
 	qm := ns.NewQueueManager()
-	target, err := ensureQueue(context.Background(), qm, "test-1")
+	source, err := ensureQueue(context.Background(), qm, "test-1")
 	if err != nil {
 		log.Println("ensure Queue error")
 		return nil, err
 	}
 
-	queue, err := ns.NewQueue(target.Name)
+	queue, err := ns.NewQueue(source.Name)
 	if err != nil {
 		fmt.Println("new Queue error")
 		return nil, err
 	}
 
-	return &SBClient{Queue: queue}, nil
+	target, err := ensureQueue(context.Background(), qm, "current-scene")
+	if err != nil {
+		log.Println("ensure sendQueue error")
+		return nil, err
+	}
+
+	sendQueue, err := ns.NewQueue(target.Name)
+	if err != nil {
+		fmt.Println("new sendQueue error")
+		return nil, err
+	}
+
+	return &SBClient{Queue: queue, SendQueue: sendQueue}, nil
 }
 
 func (s *SBClient) Close() error {

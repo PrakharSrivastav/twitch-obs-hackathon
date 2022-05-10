@@ -37,8 +37,9 @@ func NewClient() (*OBSClient, error) {
 			case *events.ScenesChanged:
 				fmt.Println("Scene changed successfully")
 
-			default:
-				log.Printf("Unhandled event: %#v", e.GetUpdateType())
+				//default:
+				//log.Println("--", e.GetUpdateType())
+				//log.Println("--")
 			}
 		}
 	}()
