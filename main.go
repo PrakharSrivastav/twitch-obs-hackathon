@@ -29,7 +29,7 @@ func main() {
 		for {
 
 			if currentScene != "StartStream" && currentScene != "SceneBRB" {
-				time.Sleep(time.Second * 60)
+				time.Sleep(time.Second * 30)
 
 				log.Println("calculating")
 				log.Println("currentScene ", currentScene, currentSceneRight, currentSceneWrong)
