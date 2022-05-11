@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	servicebus "github.com/Azure/azure-service-bus-go"
 	"github.com/PrakharSrivastav/twitch-obs-hackathon/azure"
 	"github.com/PrakharSrivastav/twitch-obs-hackathon/obs"
@@ -33,9 +34,6 @@ func main() {
 
 				log.Println("calculating")
 				log.Println("currentScene ", currentScene, currentSceneRight, currentSceneWrong)
-				if currentScene == "scene-15" && currentSceneRight > currentSceneWrong {
-					obsClient.SwitchScene("scene-complete")
-				}
 
 				switch {
 				case currentScene == "scene-15" && changeScene():
@@ -112,7 +110,13 @@ func resetCount(scene string, client *obs.OBSClient, q *azure.SBClient) {
 	currentSceneRight = 0
 	currentSceneWrong = 0
 	if scene == "scene-1" {
-		err := q.SendQueue.Send(context.Background(), servicebus.NewMessageFromString(scene))
+		answers := &Answers{Scene: "scene-1"}
+		b, err := json.Marshal(answers)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		err = q.SendQueue.Send(context.Background(), servicebus.NewMessage(b))
 		if err != nil {
 			log.Println("error with sending")
 		}
@@ -121,16 +125,28 @@ func resetCount(scene string, client *obs.OBSClient, q *azure.SBClient) {
 		client.SwitchScene(scene)
 	}
 	if scene == "SceneBRB" {
-		err := q.SendQueue.Send(context.Background(), servicebus.NewMessageFromString(scene))
+		client.SwitchScene("you-messed-up")
+		time.Sleep(time.Second * 5)
+		answers := &Answers{Scene: "scene-1"}
+		b, err := json.Marshal(answers)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		err = q.SendQueue.Send(context.Background(), servicebus.NewMessage(b))
 		if err != nil {
 			log.Println("error with sending")
 		}
-		client.SwitchScene("SceneNextQuestion")
-		time.Sleep(time.Second * 10)
-		client.SwitchScene(scene)
+		client.SwitchScene("scene-1")
 	}
-	if scene != "scene-complete" && scene != "scene-1" {
-		err := q.SendQueue.Send(context.Background(), servicebus.NewMessageFromString(scene))
+	if scene != "scene-complete" && scene != "scene-1" && scene != "SceneBRB" {
+		answers := &Answers{Scene: scene}
+		b, err := json.Marshal(answers)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		err = q.SendQueue.Send(context.Background(), servicebus.NewMessage(b))
 		if err != nil {
 			log.Println("error with sending")
 		}
